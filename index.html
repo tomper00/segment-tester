@@ -1,0 +1,299 @@
+<html>
+
+<body>
+
+<h1>Matomo segment tester</h1>
+<p>Simple tool built to veryfy segment data in your Matomo instans. The test will get visit data for days and compare it towards weeks.</p>
+<p>Created by @tomper00 and code is found here: <a target="_blank" href="https://github.com/tomper00/segment-tester">https://github.com/tomper00/segment-tester</a></p>
+    <fieldset>
+        <legend> Server settings</legend>
+        <label for="serverURL">Server URL</label>
+        <input autocomplete="on" name="serverURL" id="serverURL" type="text"  />
+        <span>Enter the Matomo Server URL for example : https://my-matomo-server.com or https://my-matomo-server.com/matomo (if that is your installation path ) </span>
+        <label autocomplete="on" for="Sitenumber">Sitenumber</label>
+        <input name="Sitenumber" id="Sitenumber" type="text" pattern="[0-9]" value="1" />
+        <span>Enter the Sitenumber to test for example 1</span><br>
+        <label for="token">API Token</label>
+        <input autocomplete="on" name="token" id="token" type="text"  />
+        <span>Enter a Matomo API token to use for your requests</span>
+    </fieldset>
+    <fieldset>
+        <legend> Segment settings</legend>
+        <label for="segments">Segments</label>
+        <input autocomplete="on" name="segments" id="segments" type="text" />
+        <span>Enter the segments to test (separated by ",") for example 1,2,3 (if you leave empty we will run through all segments for your Sitenumber (can be very slow)</span>
+        <label for="excludeSegments">Exclude Segments</label>
+        <input autocomplete="on" name="excludeSegments" id="excludeSegments" type="text" />
+        <span>Enter the segments to exclude (separated by ",") for example 1,2,3</span>
+    </fieldset>
+    <fieldset>
+        <label for="periodStart">Period</label>
+        <input name="periodStart" value="2021-03-29" id="periodStart" type="date" />
+        <span>Enter date to start with</span>
+        <label for="periodStop">Period</label>
+        <input name="periodStop" id="periodStop" value="2021-05-02" type="date" />
+        <span>Enter date to stop with</span>
+    </fieldset>
+    <button onclick="start()" id="start">Start</button>
+   <button onclick="exportTableToCSV('export.csv')">Export results To CSV</button>
+
+    <div class="mainwrapper">
+        <div class="resultsLeft">
+            <div id="statustext"></div>
+            <h2>Periods with diffs</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Segment</th>
+                        <th>Period</th>
+                        <th>Week sum</th>
+                        <th>Day sum</th>
+                        <th>Day report Link</th>
+                        <th>Week report Link</th>
+                    </tr>
+                </thead>
+                <tbody id="report">
+                </tbody>
+            </table>
+        </div>
+        <div class="resultsRight">
+            <h2>Tested periods per segment</h2>
+            <ul id="okPeriods">
+            </ul>
+        </div>
+    </div>
+    <style>
+        .resultsRight ul {
+            list-style: none;
+        }
+
+        .resultsRight li {
+            list-style: none;
+
+        }
+
+        input {
+            width: 300px;
+        }
+
+        input[type=date] {
+            width: 150px;
+        }
+
+        .resultsRight {
+            float: right;
+            width: 39%;
+            border: 1px solid;
+            padding: 5px;
+            min-height: 100px;
+
+        }
+
+        .resultsLeft {
+            border: 1px solid;
+            float: left;
+            width: 59%;
+            padding: 5px;
+            min-height: 100px;
+
+        }
+
+    </style>
+</body>
+<script>
+    var period;
+    var sURL = document.getElementById("serverURL").value;
+    var idSite = document.getElementById("Sitenumber").value;
+    var token_auth = document.getElementById("token").value;
+function downloadCSV(csv, filename) {
+    var csvFile;
+    var downloadLink;
+
+    // CSV file
+    csvFile = new Blob([csv], {type: "text/csv"});
+
+    // Download link
+    downloadLink = document.createElement("a");
+
+    // File name
+    downloadLink.download = filename;
+
+    // Create a link to the file
+    downloadLink.href = window.URL.createObjectURL(csvFile);
+
+    // Hide download link
+    downloadLink.style.display = "none";
+
+    // Add the link to DOM
+    document.body.appendChild(downloadLink);
+
+    // Click download link
+    downloadLink.click();
+}
+function exportTableToCSV(filename) {
+    var csv = [];
+    var rows = document.querySelectorAll("table tr");
+
+    for (var i = 0; i < rows.length; i++) {
+        var row = [], cols = rows[i].querySelectorAll("td, th");
+
+        for (var j = 0; j < cols.length; j++)
+            row.push(cols[j].innerText);
+
+        csv.push(row.join(","));
+    }
+
+    // Download CSV file
+    downloadCSV(csv.join("\n"), filename);
+}
+    async function get() {
+        let url = sURL + '/index.php?module=API&method=SegmentEditor.getAll&idSite=' + idSite + '&format=json&token_auth=' + token_auth;
+        let obj = await (await fetch(url)).json();
+
+        //console.log(obj);
+        return obj;
+    }
+    async function getDefinition(id) {
+        let url = sURL + '/index.php?module=API&method=SegmentEditor.get&idSegment=' + id + '&idSite=' + idSite +'&format=json&token_auth='+ token_auth + '&force_api_session=1';
+        let obj = await (await fetch(url)).json();
+        console.log(encodeURIComponent(obj.definition));
+        return encodeURIComponent(obj.definition);
+    }
+
+    async function getDays(period, segment) {
+        var segdef = await getDefinition(segment);
+
+        let url = sURL + "/index.php?module=API&method=VisitsSummary.getVisits&idSite=" + idSite + "&period=day&date=" + period + "&format=json&token_auth=" + token_auth + "&force_api_session=1&segment=" + segdef;
+
+        console.log(url);
+        let obj = await (await fetch(url)).json();
+        return obj;
+
+    }
+    async function getWeeks(period, segment) {
+        var segdef = await getDefinition(segment);
+        let url = sURL + "/index.php?module=API&method=VisitsSummary.getVisits&idSite=" + idSite + "&period=week&date=" + period + "&format=json&token_auth=" + token_auth + "&force_api_session=1&segment=" + segdef;
+
+        console.log(url);
+        let obj = await (await fetch(url)).json();
+        return obj;
+
+    }
+
+
+    async function getMonths(period, segment) {
+        var segdef = await getDefinition(segment);
+        let url1 = sURL + "/index.php?module=API&method=VisitsSummary.getVisits&idSite=" + idSite + "&period=month&date=" + period + "&format=json&token_auth=" + token_auth + "&force_api_session=1&segment=" + segdef;
+
+        console.log(url1);
+        let obj1 = await (await fetch(url1)).json();
+        return obj1;
+
+    }
+
+    function getDaySum(days) {
+        var daysum = 0;
+        for (const [key, value] of Object.entries(days)) {
+            num = Number(`${value}`);
+            daysum += num;
+        }
+        return daysum;
+
+    }
+
+   async function testWeeks (weeks,idsegment,taglength) {
+             for (const [key, value] of Object.entries(weeks)) {
+                    //date range YYYY-MM.DD,YYYY-MM.DD
+                    let week = `${key}`;
+                    //console.log("Week: " + `${key}`);
+
+                    var daysum = 0;
+                    var num = 0;
+                    //Weeksum from loop
+                    var weeksum = Number(`${value}`);
+                    //console.log(`${key} ${value}` );
+
+                    let days = await getDays(week, idsegment);
+                    //Get sum from days
+                    //console.log("days.length: " + Object.keys(days).length);
+                    var position = Object.keys(days).length;
+
+                    daysum = getDaySum(days);
+                    //console.log("daysum" + daysum);
+                    //console.log("weeksum" + weeksum);
+
+                    if (daysum != weeksum && weeksum == 0) {
+
+                        theTr = document.createElement('tr');
+                        theTr.innerHTML = '<td>' + idsegment + '</td>' +
+                            '<td>' + week + '</td>' +
+                            '<td>' + String(weeksum) + '</td>' +
+                            '<td>' + String(daysum) + '</td>' +
+                            '<td><a target="_blank" href="' + sURL + '/index.php?module=API&method=VisitsSummary.getVisits&idSite=1&period=day&date=' + week +'&format=html&token_auth='+ token_auth +'&force_api_session=1&segment=' + await getDefinition(idsegment) + '">Link to day report</a></td>' +
+                            '<td><a target="_blank" href="' + sURL + '/index.php?module=API&method=VisitsSummary.getVisits&idSite=1&period=week&date=' + week +'&format=html&token_auth='+ token_auth +'&force_api_session=1&segment='+ await getDefinition(idsegment) + '">Link to week report</a></td>';
+                        document.getElementById("report").appendChild(theTr);
+
+                        theLi = document.createElement('li');
+                        theLi.innerHTML = "Segment id: " + idsegment + " with " + String(weeksum) + " visits for period " + week + " - not ok";
+                        document.getElementById("okPeriods").appendChild(theLi);
+                    } else {
+                        theLi = document.createElement('li');
+                        theLi.innerHTML = "Segment id: " + idsegment + " with " + String(weeksum) + " visits for period " + week + " - ok";
+                        document.getElementById("okPeriods").appendChild(theLi);
+                        theLi.style = "colour: red;"
+                    }
+
+                }
+                document.getElementById("statustext").innerHTML = "All " + taglength + " segments processed";
+
+    }
+
+
+
+    function start() {
+        (async () => {
+        sURL = document.getElementById("serverURL").value;
+        idSite = document.getElementById("Sitenumber").value;
+        token_auth = document.getElementById("token").value;
+            //Clear prev results
+            document.getElementById("report").innerHTML = "";
+            document.getElementById("okPeriods").innerHTML = "";
+
+            var tags = [];
+
+            if (document.getElementById("segments").value != "") {
+                var tmpTag = document.getElementById("segments").value.split(",");
+                for (i = 0; i < tmpTag.length; i++) {
+                    tags.push({
+                        idsegment: tmpTag[i]
+                    })
+                }
+            } else {
+                tags = await get();
+            }
+            //console.log(tags)
+            for (i = 0; i < tags.length; i++) {
+                var rownum = i + 1;
+                document.getElementById("statustext").innerHTML = "Runing segment: " + tags[i].idsegment + " (" + rownum + " of " + tags.length + ")";
+                console.log("*********");
+                console.log("Segment-id: " + tags[i].idsegment);
+                let excludeSegments = document.getElementById("excludeSegments").value;
+                if(excludeSegments.includes(tags[i].idsegment)) {
+                    console.log("Skipping segment: "+ tags[i].idsegment);
+                   continue;
+                }
+
+                period = document.getElementById("periodStart").value + "," + document.getElementById("periodStop").value;
+
+                weeks = await getWeeks(period, tags[i].idsegment);
+                //Todo monthly tests
+                //months = await getMonths(period, tags[i].idsegment);
+                testWeeks(weeks,tags[i].idsegment, tags.length);
+
+            }
+        })()
+    }
+
+</script>
+
+</html>
