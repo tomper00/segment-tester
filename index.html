@@ -8,13 +8,13 @@
     <fieldset>
         <legend> Server settings</legend>
         <label for="serverURL">Server URL</label>
-        <input autocomplete="on" name="serverURL" id="serverURL" type="text"  />
+        <input autocomplete="on" name="serverURL" id="serverURL" type="text" value="https://af.analytics.elx.cloud/" />
         <span>Enter the Matomo Server URL for example : https://my-matomo-server.com or https://my-matomo-server.com/matomo (if that is your installation path ) </span>
         <label autocomplete="on" for="Sitenumber">Sitenumber</label>
         <input name="Sitenumber" id="Sitenumber" type="text" pattern="[0-9]" value="1" />
         <span>Enter the Sitenumber to test for example 1</span><br>
         <label for="token">API Token</label>
-        <input autocomplete="on" name="token" id="token" type="text"  />
+        <input autocomplete="on" name="token" id="token" type="text" value="c5a1929ad04e532ea0a724157907295b" />
         <span>Enter a Matomo API token to use for your requests</span>
     </fieldset>
     <fieldset>
@@ -28,10 +28,10 @@
     </fieldset>
     <fieldset>
         <label for="periodStart">Period</label>
-        <input name="periodStart" value="2021-03-29" id="periodStart" type="date" />
+        <input name="periodStart" value="2021-04-01" id="periodStart" type="date" />
         <span>Enter date to start with</span>
         <label for="periodStop">Period</label>
-        <input name="periodStop" id="periodStop" value="2021-05-02" type="date" />
+        <input name="periodStop" id="periodStop" value="2021-04-30" type="date" />
         <span>Enter date to stop with</span>
     </fieldset>
     <button onclick="start()" id="start">Start</button>
@@ -163,6 +163,9 @@ function exportTableToCSV(filename) {
     async function getDays(period, segment) {
         var segdef = await getDefinition(segment);
 
+        console.log("segment: "  + segment);
+        console.log("Period: "  + period);
+
         let url = sURL + "/index.php?module=API&method=VisitsSummary.getVisits&idSite=" + idSite + "&period=day&date=" + period + "&format=json&token_auth=" + token_auth + "&force_api_session=1&segment=" + segdef;
 
         console.log(url);
@@ -174,7 +177,7 @@ function exportTableToCSV(filename) {
         var segdef = await getDefinition(segment);
         let url = sURL + "/index.php?module=API&method=VisitsSummary.getVisits&idSite=" + idSite + "&period=week&date=" + period + "&format=json&token_auth=" + token_auth + "&force_api_session=1&segment=" + segdef;
 
-        console.log(url);
+        //console.log(url);
         let obj = await (await fetch(url)).json();
         return obj;
 
@@ -195,7 +198,17 @@ function exportTableToCSV(filename) {
         var daysum = 0;
         for (const [key, value] of Object.entries(days)) {
             num = Number(`${value}`);
+            if(Number.isInteger(num)) {
+                daysum += num;
+            }
+            else {
+            console.log("Not a number");
+            console.log(`${key}` );
+            console.log(`${value}` );
+            console.log("Manually setting day value to 0 for calculation");
             daysum += num;
+
+            }
         }
         return daysum;
 
@@ -222,7 +235,7 @@ function exportTableToCSV(filename) {
                     //console.log("daysum" + daysum);
                     //console.log("weeksum" + weeksum);
 
-                    if (daysum != weeksum && weeksum == 0) {
+                    //if (daysum != weeksum && weeksum == 0) {
 
                         theTr = document.createElement('tr');
                         theTr.innerHTML = '<td>' + idsegment + '</td>' +
@@ -234,21 +247,63 @@ function exportTableToCSV(filename) {
                         document.getElementById("report").appendChild(theTr);
 
                         theLi = document.createElement('li');
-                        theLi.innerHTML = "Segment id: " + idsegment + " with " + String(weeksum) + " visits for period " + week + " - not ok";
+                        theLi.innerHTML = "Segment id: " + idsegment + " with " + String(weeksum) + " visits for period " + week + " - processed";
                         document.getElementById("okPeriods").appendChild(theLi);
-                    } else {
+                    /*} else {
                         theLi = document.createElement('li');
                         theLi.innerHTML = "Segment id: " + idsegment + " with " + String(weeksum) + " visits for period " + week + " - ok";
                         document.getElementById("okPeriods").appendChild(theLi);
                         theLi.style = "colour: red;"
-                    }
+                    }*/
 
                 }
-                document.getElementById("statustext").innerHTML = "All " + taglength + " segments processed";
-
     }
 
+ async function testMonths (months,idsegment,taglength) {
+             for (const [key, value] of Object.entries(months)) {
+                    //date range YYYY-MM.DD,YYYY-MM.DD
+                    let month = `${key}`;
+                    //console.log("Week: " + `${key}`);
 
+                    var daysum = 0;
+                    var num = 0;
+                    //Monthsum from loop
+                    var monthsum = Number(`${value}`);
+                    //console.log(`${key} ${value}` );
+
+                    let days = await getDays(months, idsegment);
+                    //Get sum from days
+                    //console.log("days.length: " + Object.keys(days).length);
+                    var position = Object.keys(days).length;
+
+                    daysum = getDaySum(days);
+                    //console.log("daysum" + daysum);
+                    //console.log("weeksum" + weeksum);
+
+                    //if (daysum != monthsum && monthsum == 0) {
+
+                        theTr = document.createElement('tr');
+                        theTr.innerHTML = '<td>' + idsegment + '</td>' +
+                            '<td>' + month + '</td>' +
+                            '<td>' + String(monthsum) + '</td>' +
+                            '<td>' + String(daysum) + '</td>' +
+                            '<td><a target="_blank" href="' + sURL + '/index.php?module=API&method=VisitsSummary.getVisits&idSite=1&period=day&date=' + month +'&format=html&token_auth='+ token_auth +'&force_api_session=1&segment=' + await getDefinition(idsegment) + '">Link to day report</a></td>' +
+                            '<td><a target="_blank" href="' + sURL + '/index.php?module=API&method=VisitsSummary.getVisits&idSite=1&period=month&date=' + month +'&format=html&token_auth='+ token_auth +'&force_api_session=1&segment='+ await getDefinition(idsegment) + '">Link to month report</a></td>';
+                        document.getElementById("report").appendChild(theTr);
+
+                        theLi = document.createElement('li');
+                        theLi.innerHTML = "Segment id: " + idsegment + " with " + String(monthsum) + " visits for period " + month + " - not ok";
+                        document.getElementById("okPeriods").appendChild(theLi);
+                   /* } else {
+                        theLi = document.createElement('li');
+                        theLi.innerHTML = "Segment id: " + idsegment + " with " + String(monthsum) + " visits for period " + month + " - ok";
+                        theLi.style = "colour: red;"
+                        document.getElementById("okPeriods").appendChild(theLi);
+                    }**/
+
+                }
+
+    }
 
     function start() {
         (async () => {
@@ -286,9 +341,16 @@ function exportTableToCSV(filename) {
                 period = document.getElementById("periodStart").value + "," + document.getElementById("periodStop").value;
 
                 weeks = await getWeeks(period, tags[i].idsegment);
+                console.log(weeks);
+
                 //Todo monthly tests
                 //months = await getMonths(period, tags[i].idsegment);
                 testWeeks(weeks,tags[i].idsegment, tags.length);
+
+                months = await getMonths(period, tags[i].idsegment);
+                console.log(months);
+                testMonths(months,tags[i].idsegment, tags.length);
+                //document.getElementById("statustext").innerHTML = "All " + taglength + " segments processed";
 
             }
         })()
